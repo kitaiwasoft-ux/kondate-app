@@ -251,6 +251,45 @@ body {
 }
 .toast.success { background: #10b981; }
 .toast.error { background: #ef4444; }
+
+/* Add recipe form */
+.add-recipe-btn {
+  width: 100%; padding: 9px;
+  border: 2px dashed #d1d5db; border-radius: 10px;
+  background: #fff; color: #6366f1;
+  font-size: 13px; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+  margin-bottom: 10px;
+}
+.add-recipe-btn:active { background: #f5f3ff; }
+.add-recipe-form {
+  background: #f9fafb; border-radius: 12px;
+  padding: 12px; margin-bottom: 12px;
+  border: 1.5px solid #e5e7eb;
+}
+.add-recipe-form .form-title { font-size: 12px; font-weight: 700; color: #555; margin-bottom: 10px; }
+.form-field { margin-bottom: 8px; }
+.form-field label { font-size: 11px; color: #888; font-weight: 600; display: block; margin-bottom: 3px; }
+.form-field input, .form-field select {
+  width: 100%; border: 1.5px solid #e5e7eb;
+  border-radius: 8px; padding: 8px 10px;
+  font-size: 14px; font-family: inherit; outline: none;
+  background: #fff;
+}
+.form-field input:focus, .form-field select:focus { border-color: #6366f1; }
+.form-actions { display: flex; gap: 8px; margin-top: 10px; }
+.form-save-btn {
+  flex: 1; background: #6366f1; color: #fff;
+  border: none; border-radius: 8px; padding: 9px;
+  font-size: 13px; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+}
+.form-save-btn:disabled { opacity: 0.5; }
+.form-cancel-btn {
+  background: #f0f0f0; color: #555;
+  border: none; border-radius: 8px; padding: 9px 14px;
+  font-size: 13px; cursor: pointer; font-family: inherit;
+}
 </style>
 </head>
 <body>
@@ -305,6 +344,26 @@ body {
         <button class="r-tab active" id="tab-dan" onclick="switchTab('dan')">🍳 旦那のレシピ</button>
         <button class="r-tab" id="tab-me" onclick="switchTab('me')">🍽️ 私のレシピ</button>
       </div>
+      <button class="add-recipe-btn" onclick="toggleAddForm()">＋ 新規レシピを追加</button>
+      <div class="add-recipe-form hidden" id="add-recipe-form">
+        <div class="form-title" id="add-form-title">レシピを追加</div>
+        <div class="form-field">
+          <label>レシピ名 *</label>
+          <input type="text" id="add-name" placeholder="例: カレーライス" />
+        </div>
+        <div class="form-field">
+          <label>カテゴリ</label>
+          <select id="add-category"></select>
+        </div>
+        <div class="form-field" id="add-sub-field">
+          <label id="add-sub-label">メイン食材</label>
+          <input type="text" id="add-sub" placeholder="" />
+        </div>
+        <div class="form-actions">
+          <button class="form-cancel-btn" onclick="toggleAddForm()">キャンセル</button>
+          <button class="form-save-btn" id="add-save-btn" onclick="saveNewRecipe()">追加する</button>
+        </div>
+      </div>
       <div class="cat-filter" id="cat-filter"></div>
       <input type="text" class="r-search" id="r-search" placeholder="🔍 レシピを検索..." oninput="renderRecipes()" />
       <div class="r-list" id="r-list"></div>
@@ -339,6 +398,10 @@ let recipes = { dan: [], me: [] };
 let activeTab = 'dan';
 let activeCat = 'all';
 let editCtx = null;  // { day, slot }
+let addFormOpen = false;
+
+const CATS_DAN = ['ご飯もの','和食（魚）','エスニック','鍋もの','カレー','麺類','丼もの','カレー（レトルト）','外食','カテゴリなし'];
+const CATS_ME  = ['パン','お菓子','デザート','離乳食','おかず','まとめ','アイス'];
 
 // ===== Week utils =====
 function getISOWeek(date) {
@@ -550,7 +613,70 @@ function switchTab(tab) {
   document.getElementById('tab-dan').className = 'r-tab' + (tab==='dan' ? ' active' : '');
   document.getElementById('tab-me').className = 'r-tab' + (tab==='me' ? ' active' : '');
   document.getElementById('r-search').value = '';
+  // Reset add form
+  if (addFormOpen) toggleAddForm();
   renderCatFilter(); renderRecipes();
+}
+
+function toggleAddForm() {
+  addFormOpen = !addFormOpen;
+  const form = document.getElementById('add-recipe-form');
+  form.classList.toggle('hidden', !addFormOpen);
+  if (addFormOpen) {
+    const isDan = activeTab === 'dan';
+    const cats = isDan ? CATS_DAN : CATS_ME;
+    document.getElementById('add-form-title').textContent =
+      isDan ? '🍳 旦那のレシピに追加' : '🍽️ 私のレシピに追加';
+    document.getElementById('add-sub-label').textContent = isDan ? 'メイン食材' : '調理時間';
+    document.getElementById('add-sub').placeholder = isDan ? '例: 鶏肉' : '例: 30分';
+    const sel = document.getElementById('add-category');
+    sel.innerHTML = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    document.getElementById('add-name').value = '';
+    document.getElementById('add-sub').value = '';
+    document.getElementById('add-name').focus();
+  }
+}
+
+async function saveNewRecipe() {
+  const name = document.getElementById('add-name').value.trim();
+  if (!name) { toast('レシピ名を入力してください', 'error'); return; }
+  const category = document.getElementById('add-category').value;
+  const sub = document.getElementById('add-sub').value.trim();
+  const isDan = activeTab === 'dan';
+  const dbId = isDan ? DAN_DB : ME_DB;
+
+  const btn = document.getElementById('add-save-btn');
+  btn.disabled = true; btn.textContent = '追加中...';
+
+  try {
+    const props = {
+      'レシピ名': { title: [{ text: { content: name } }] },
+      'カテゴリ': { select: { name: category } },
+    };
+    if (isDan) {
+      props['メイン食材'] = { rich_text: [{ text: { content: sub } }] };
+    } else {
+      props['調理時間'] = { rich_text: [{ text: { content: sub } }] };
+    }
+    const page = await notionAPI('pages', 'POST', {
+      parent: { database_id: dbId },
+      properties: props
+    });
+    // Add to local state
+    const newRecipe = { id: page.id, name, category, sub };
+    recipes[activeTab].push(newRecipe);
+    clearCache();
+    toast('レシピを追加しました', 'success');
+    toggleAddForm();
+    renderCatFilter();
+    renderRecipes();
+    // Auto-fill the meal input
+    document.getElementById('free-input').value = name;
+  } catch(e) {
+    toast('追加に失敗: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '追加する';
+  }
 }
 
 function renderCatFilter() {
