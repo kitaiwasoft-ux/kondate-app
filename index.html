@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🍱 週間献立</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Hiragino Sans', 'Yu Gothic', 'Noto Sans JP', sans-serif;
+  background: #f5f6fa;
+  color: #1a1a2e;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Loading */
+#loading {
+  position: fixed; inset: 0;
+  background: rgba(255,255,255,0.95);
+  z-index: 999;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+}
+.spinner {
+  width: 38px; height: 38px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading-text { font-size: 13px; color: #888; }
+.hidden { display: none !important; }
+
+/* Header */
+.app-header {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: #fff;
+  padding: 14px 16px 12px;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 12px rgba(99,102,241,0.35);
+}
+.header-top {
+  display: flex; align-items: center;
+  justify-content: space-between; margin-bottom: 10px;
+}
+.app-title { font-size: 17px; font-weight: 700; }
+.sync-btn {
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: #fff; border-radius: 8px;
+  padding: 6px 12px; font-size: 12px;
+  cursor: pointer; font-family: inherit;
+}
+
+/* Week nav */
+.week-nav {
+  display: flex; align-items: center; gap: 8px;
+}
+.week-btn {
+  background: rgba(255,255,255,0.2); border: none; color: #fff;
+  border-radius: 8px; width: 34px; height: 34px;
+  font-size: 20px; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.week-btn:active { background: rgba(255,255,255,0.35); }
+.week-info { text-align: center; flex: 1; }
+.week-label { font-size: 14px; font-weight: 600; }
+.week-range { font-size: 11px; opacity: 0.82; margin-top: 1px; }
+.this-week-btn {
+  background: rgba(255,255,255,0.25);
+  border: 1px solid rgba(255,255,255,0.5);
+  color: #fff; border-radius: 6px;
+  padding: 5px 9px; font-size: 11px;
+  cursor: pointer; font-family: inherit; white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Main */
+.main { padding: 12px 12px 80px; }
+.grid-col-headers {
+  display: grid; grid-template-columns: 46px 1fr 1fr;
+  gap: 6px; margin-bottom: 4px;
+}
+.col-header {
+  text-align: center; font-size: 12px; font-weight: 700;
+  color: #888; padding: 2px 0;
+}
+
+/* Day row */
+.day-row {
+  display: grid; grid-template-columns: 46px 1fr 1fr;
+  gap: 6px; margin-bottom: 6px; align-items: stretch;
+}
+.day-label {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: #fff; border-radius: 10px;
+  padding: 6px 4px; min-height: 70px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.day-label .day-name { font-size: 12px; font-weight: 700; color: #555; }
+.day-label .day-num { font-size: 20px; font-weight: 700; color: #1a1a2e; line-height: 1.1; margin-top: 1px; }
+.day-label.today { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+.day-label.today .day-name, .day-label.today .day-num { color: #fff; }
+
+/* Meal cell */
+.meal-cell {
+  background: #fff; border-radius: 10px;
+  padding: 9px 10px; min-height: 70px;
+  cursor: pointer; position: relative;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  border: 2px solid transparent;
+  display: flex; flex-direction: column;
+  transition: box-shadow 0.15s;
+}
+.meal-cell:active { box-shadow: 0 2px 8px rgba(99,102,241,0.2); }
+.meal-cell.filled { border-color: #ede9fe; }
+.slot-icon { font-size: 10px; color: #bbb; font-weight: 700; margin-bottom: 4px; }
+.meal-name {
+  font-size: 13px; font-weight: 600; color: #1a1a2e;
+  line-height: 1.3; flex: 1; display: flex; align-items: center;
+}
+.cat-tag {
+  display: inline-block; font-size: 10px;
+  padding: 1px 6px; border-radius: 10px;
+  color: #fff; margin-top: 4px;
+  max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  align-self: flex-start;
+}
+.meal-cell.empty .meal-name {
+  color: #d0d0d0; font-size: 22px;
+  justify-content: center; width: 100%;
+  font-weight: 300;
+}
+.del-btn {
+  position: absolute; top: 4px; right: 4px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #ef4444; color: #fff;
+  border: none; font-size: 13px; line-height: 1;
+  cursor: pointer; display: none;
+  align-items: center; justify-content: center;
+}
+.meal-cell.filled:active .del-btn { display: flex; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 200;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.modal {
+  background: #fff; border-radius: 20px 20px 0 0;
+  width: 100%; max-width: 500px;
+  max-height: 88vh; display: flex;
+  flex-direction: column; overflow: hidden;
+  animation: slideUp 0.22s ease;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.modal-drag { width: 36px; height: 4px; background: #e0e0e0; border-radius: 2px; margin: 10px auto 0; }
+.modal-header {
+  padding: 10px 16px 0;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-title { font-size: 15px; font-weight: 700; }
+.modal-close {
+  background: #f0f0f0; border: none; border-radius: 50%;
+  width: 28px; height: 28px; font-size: 16px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.modal-body { padding: 12px 16px 20px; overflow-y: auto; flex: 1; }
+
+/* Free input */
+.section-label { font-size: 11px; font-weight: 700; color: #999; letter-spacing: .5px; margin-bottom: 6px; text-transform: uppercase; }
+.input-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.free-input {
+  flex: 1; border: 2px solid #e5e7eb;
+  border-radius: 10px; padding: 10px 12px;
+  font-size: 15px; font-family: inherit; outline: none;
+}
+.free-input:focus { border-color: #6366f1; }
+.save-btn {
+  background: #6366f1; color: #fff; border: none;
+  border-radius: 10px; padding: 10px 18px;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+.save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Recipe tabs */
+.recipe-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.r-tab {
+  flex: 1; padding: 8px 6px;
+  border: 2px solid #e5e7eb; border-radius: 10px;
+  background: #fff; font-size: 12px; font-weight: 700;
+  cursor: pointer; font-family: inherit; text-align: center; color: #888;
+}
+.r-tab.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+
+/* Category filter */
+.cat-filter {
+  display: flex; gap: 6px; overflow-x: auto;
+  padding-bottom: 6px; margin-bottom: 8px; scrollbar-width: none;
+}
+.cat-filter::-webkit-scrollbar { display: none; }
+.cat-chip {
+  padding: 4px 10px; border-radius: 20px;
+  border: 1.5px solid #e5e7eb; background: #fff;
+  font-size: 11px; cursor: pointer;
+  white-space: nowrap; font-family: inherit; color: #555;
+}
+.cat-chip.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+
+/* Recipe search */
+.r-search {
+  width: 100%; border: 2px solid #e5e7eb;
+  border-radius: 10px; padding: 9px 12px;
+  font-size: 14px; font-family: inherit; outline: none;
+  margin-bottom: 10px;
+}
+.r-search:focus { border-color: #6366f1; }
+
+/* Recipe list */
+.r-list { display: flex; flex-direction: column; gap: 5px; }
+.r-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border: 1.5px solid #f0f0f0;
+  border-radius: 10px; cursor: pointer;
+}
+.r-item:active { background: #f5f3ff; border-color: #6366f1; }
+.r-item .rname { font-size: 14px; font-weight: 600; flex: 1; }
+.r-item .rsub { font-size: 11px; color: #aaa; }
+.r-item .rcat {
+  font-size: 10px; padding: 2px 7px;
+  border-radius: 10px; color: #fff; white-space: nowrap;
+}
+.no-r { text-align: center; color: #ccc; font-size: 14px; padding: 24px; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a2e; color: #fff;
+  padding: 10px 20px; border-radius: 10px;
+  font-size: 13px; z-index: 500;
+  transition: opacity 0.3s; pointer-events: none;
+  white-space: nowrap;
+}
+.toast.success { background: #10b981; }
+.toast.error { background: #ef4444; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div id="loading-text">データを読み込み中...</div>
+</div>
+
+<header class="app-header">
+  <div class="header-top">
+    <div class="app-title">🍱 週間献立</div>
+    <button class="sync-btn" onclick="syncAll()">🔄 同期</button>
+  </div>
+  <div class="week-nav">
+    <button class="week-btn" onclick="changeWeek(-1)">‹</button>
+    <div class="week-info">
+      <div class="week-label" id="week-label"></div>
+      <div class="week-range" id="week-range"></div>
+    </div>
+    <button class="this-week-btn" onclick="goThisWeek()">今週</button>
+    <button class="week-btn" onclick="changeWeek(1)">›</button>
+  </div>
+</header>
+
+<main class="main">
+  <div class="grid-col-headers">
+    <div></div>
+    <div class="col-header">☀️ 昼</div>
+    <div class="col-header">🌙 夜</div>
+  </div>
+  <div id="grid"></div>
+</main>
+
+<!-- Modal -->
+<div class="modal-overlay hidden" id="overlay" onclick="onOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">献立を入力</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="section-label">料理名を入力</div>
+      <div class="input-row">
+        <input type="text" class="free-input" id="free-input" placeholder="例: カレーライス" />
+        <button class="save-btn" id="save-btn" onclick="saveFromInput()">保存</button>
+      </div>
+
+      <div class="section-label">レシピから選ぶ</div>
+      <div class="recipe-tabs">
+        <button class="r-tab active" id="tab-dan" onclick="switchTab('dan')">🍳 旦那のレシピ</button>
+        <button class="r-tab" id="tab-me" onclick="switchTab('me')">🍽️ 私のレシピ</button>
+      </div>
+      <div class="cat-filter" id="cat-filter"></div>
+      <input type="text" class="r-search" id="r-search" placeholder="🔍 レシピを検索..." oninput="renderRecipes()" />
+      <div class="r-list" id="r-list"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== Config =====
+const WEEK_DB = '253a63f3-9472-44d8-8e20-d2891e34d7e5';
+const DAN_DB  = '415dca46-5c58-41d5-87a8-fbb4f0a112d7';
+const ME_DB   = 'a1dcc4a1-f1c3-4aa3-8a78-808752d92f7b';
+const DAYS    = ['月曜','火曜','水曜','木曜','金曜','土曜','日曜'];
+const DAY_JP  = ['月','火','水','木','金','土','日'];
+const SLOTS   = ['昼☀️','夜🌙'];
+const CACHE_TTL = 3600000;
+
+const CAT_COLORS_DAN = {
+  'ご飯もの':'#ca8a04','和食（魚）':'#2563eb','エスニック':'#ea580c',
+  '鍋もの':'#7c3aed','カレー':'#dc2626','麺類':'#16a34a',
+  '丼もの':'#db2777','カレー（レトルト）':'#6b7280','外食':'#78350f','カテゴリなし':'#9ca3af'
+};
+const CAT_COLORS_ME = {
+  'パン':'#d97706','お菓子':'#ec4899','デザート':'#f59e0b',
+  '離乳食':'#3b82f6','おかず':'#ef4444','まとめ':'#6b7280','アイス':'#8b5cf6'
+};
+
+// ===== State =====
+let currentWeek = getISOWeek(new Date());
+let meals = {};      // { "月曜_昼☀️": {id, name, category} }
+let recipes = { dan: [], me: [] };
+let activeTab = 'dan';
+let activeCat = 'all';
+let editCtx = null;  // { day, slot }
+
+// ===== Week utils =====
+function getISOWeek(date) {
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const w1 = new Date(d.getFullYear(), 0, 4);
+  const wn = 1 + Math.round(((d - w1) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7);
+  return `${d.getFullYear()}-W${String(wn).padStart(2,'0')}`;
+}
+
+function getMon(weekStr) {
+  const [yr, wn] = weekStr.split('-W').map(Number);
+  const jan4 = new Date(yr, 0, 4);
+  const mon = new Date(jan4);
+  mon.setDate(jan4.getDate() - (jan4.getDay() + 6) % 7 + (wn - 1) * 7);
+  return mon;
+}
+
+function weekDates(weekStr) {
+  const mon = getMon(weekStr);
+  return Array.from({length:7}, (_,i) => { const d=new Date(mon); d.setDate(mon.getDate()+i); return d; });
+}
+
+function addWeeks(ws, n) {
+  const m = getMon(ws);
+  m.setDate(m.getDate() + n * 7);
+  return getISOWeek(m);
+}
+
+function fmt(d) { return `${d.getMonth()+1}/${d.getDate()}`; }
+
+function isToday(d) {
+  const t = new Date();
+  return d.getFullYear()===t.getFullYear() && d.getMonth()===t.getMonth() && d.getDate()===t.getDate();
+}
+
+// ===== Notion API =====
+async function notionAPI(path, method='GET', body=null) {
+  const res = await fetch('/api/notion', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ notionPath: path, notionMethod: method, notionBody: body })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || data.error || `Error ${res.status}`);
+  return data;
+}
+
+async function fetchMeals(week) {
+  const data = await notionAPI(`databases/${WEEK_DB}/query`, 'POST', {
+    filter: { property:'週', rich_text:{ equals: week } },
+    page_size: 100
+  });
+  const result = {};
+  for (const p of data.results) {
+    if (p.archived) continue;
+    const day  = p.properties['曜日']?.select?.name;
+    const slot = p.properties['昼夜']?.select?.name;
+    const name = p.properties['料理名']?.title?.[0]?.plain_text || '';
+    if (day && slot && name) result[`${day}_${slot}`] = { id: p.id, name };
+  }
+  return result;
+}
+
+async function fetchRecipes(dbId, isDan) {
+  let all = [], cursor;
+  do {
+    const body = { page_size: 100 };
+    if (cursor) body.start_cursor = cursor;
+    const data = await notionAPI(`databases/${dbId}/query`, 'POST', body);
+    for (const p of data.results) {
+      if (p.archived) continue;
+      const name = p.properties['レシピ名']?.title?.[0]?.plain_text || '';
+      if (!name) continue;
+      all.push({
+        id: p.id,
+        name,
+        category: p.properties['カテゴリ']?.select?.name || 'カテゴリなし',
+        sub: isDan
+          ? (p.properties['メイン食材']?.rich_text?.[0]?.plain_text || '')
+          : (p.properties['調理時間']?.rich_text?.[0]?.plain_text || ''),
+      });
+    }
+    cursor = data.has_more ? data.next_cursor : null;
+  } while (cursor);
+  return all;
+}
+
+async function createMeal(week, day, slot, name) {
+  return notionAPI('pages', 'POST', {
+    parent: { database_id: WEEK_DB },
+    properties: {
+      '料理名': { title: [{ text: { content: name } }] },
+      '週':    { rich_text: [{ text: { content: week } }] },
+      '曜日':  { select: { name: day } },
+      '昼夜':  { select: { name: slot } }
+    }
+  });
+}
+
+async function updateMeal(pageId, name) {
+  return notionAPI(`pages/${pageId}`, 'PATCH', {
+    properties: { '料理名': { title: [{ text: { content: name } }] } }
+  });
+}
+
+async function archiveMeal(pageId) {
+  return notionAPI(`pages/${pageId}`, 'PATCH', { archived: true });
+}
+
+// ===== Cache =====
+function getCache(k) {
+  try {
+    const raw = localStorage.getItem(`kondate_${k}`);
+    if (!raw) return null;
+    const { ts, d } = JSON.parse(raw);
+    return Date.now() - ts < CACHE_TTL ? d : null;
+  } catch { return null; }
+}
+function setCache(k, d) {
+  try { localStorage.setItem(`kondate_${k}`, JSON.stringify({ ts: Date.now(), d })); } catch {}
+}
+function clearCache() {
+  ['dan','me'].forEach(k => localStorage.removeItem(`kondate_${k}`));
+}
+
+// ===== Render =====
+function updateHeader() {
+  const dates = weekDates(currentWeek);
+  document.getElementById('week-label').textContent = currentWeek;
+  document.getElementById('week-range').textContent =
+    `${fmt(dates[0])}（月）〜 ${fmt(dates[6])}（日）`;
+}
+
+function renderGrid() {
+  const dates = weekDates(currentWeek);
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  DAYS.forEach((day, i) => {
+    const row = document.createElement('div');
+    row.className = 'day-row';
+
+    const dl = document.createElement('div');
+    dl.className = 'day-label' + (isToday(dates[i]) ? ' today' : '');
+    dl.innerHTML = `<span class="day-name">${DAY_JP[i]}</span><span class="day-num">${dates[i].getDate()}</span>`;
+    row.appendChild(dl);
+
+    SLOTS.forEach(slot => {
+      const key = `${day}_${slot}`;
+      const meal = meals[key];
+      const cell = document.createElement('div');
+      cell.className = 'meal-cell ' + (meal ? 'filled' : 'empty');
+      cell.addEventListener('click', (e) => {
+        if (e.target.classList.contains('del-btn')) return;
+        openModal(day, slot);
+      });
+
+      if (meal) {
+        cell.innerHTML = `
+          <div class="slot-icon">${slot==='昼☀️' ? '☀️ 昼' : '🌙 夜'}</div>
+          <div class="meal-name">${esc(meal.name)}</div>
+          <button class="del-btn" onclick="handleDelete(event,'${day}','${slot}')">×</button>`;
+      } else {
+        cell.innerHTML = `
+          <div class="slot-icon">${slot==='昼☀️' ? '☀️ 昼' : '🌙 夜'}</div>
+          <div class="meal-name">+</div>`;
+      }
+
+      row.appendChild(cell);
+    });
+
+    grid.appendChild(row);
+  });
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ===== Modal =====
+function openModal(day, slot) {
+  editCtx = { day, slot };
+  const meal = meals[`${day}_${slot}`];
+  document.getElementById('modal-title').textContent =
+    `${day} ${slot==='昼☀️' ? '☀️昼ごはん' : '🌙夜ごはん'}`;
+  document.getElementById('free-input').value = meal?.name || '';
+  activeTab = 'dan'; activeCat = 'all';
+  document.getElementById('tab-dan').className = 'r-tab active';
+  document.getElementById('tab-me').className = 'r-tab';
+  document.getElementById('r-search').value = '';
+  renderCatFilter(); renderRecipes();
+  document.getElementById('overlay').classList.remove('hidden');
+  setTimeout(() => document.getElementById('free-input').focus(), 100);
+}
+
+function closeModal() {
+  document.getElementById('overlay').classList.add('hidden');
+  editCtx = null;
+}
+
+function onOverlayClick(e) {
+  if (e.target.id === 'overlay') closeModal();
+}
+
+function switchTab(tab) {
+  activeTab = tab; activeCat = 'all';
+  document.getElementById('tab-dan').className = 'r-tab' + (tab==='dan' ? ' active' : '');
+  document.getElementById('tab-me').className = 'r-tab' + (tab==='me' ? ' active' : '');
+  document.getElementById('r-search').value = '';
+  renderCatFilter(); renderRecipes();
+}
+
+function renderCatFilter() {
+  const cats = ['all', ...new Set(recipes[activeTab].map(r=>r.category))];
+  document.getElementById('cat-filter').innerHTML = cats.map(c =>
+    `<button class="cat-chip${c===activeCat?' active':''}" onclick="selectCat('${esc(c)}')">${c==='all'?'すべて':esc(c)}</button>`
+  ).join('');
+}
+
+function selectCat(c) { activeCat = c; renderCatFilter(); renderRecipes(); }
+
+function renderRecipes() {
+  const q = document.getElementById('r-search').value.toLowerCase();
+  const colorMap = activeTab === 'dan' ? CAT_COLORS_DAN : CAT_COLORS_ME;
+
+  let list = recipes[activeTab];
+  if (activeCat !== 'all') list = list.filter(r => r.category === activeCat);
+  if (q) list = list.filter(r => r.name.toLowerCase().includes(q) || r.sub.toLowerCase().includes(q));
+  list = [...list].sort((a,b) => a.name.localeCompare(b.name,'ja'));
+
+  const el = document.getElementById('r-list');
+  if (!list.length) { el.innerHTML = '<div class="no-r">レシピが見つかりません</div>'; return; }
+
+  el.innerHTML = list.map(r => {
+    const color = colorMap[r.category] || '#9ca3af';
+    return `<div class="r-item" onclick="selectRecipe('${esc(r.name)}')">
+      <div class="rname">${esc(r.name)}</div>
+      ${r.sub ? `<div class="rsub">${esc(r.sub)}</div>` : ''}
+      <div class="rcat" style="background:${color}">${esc(r.category)}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectRecipe(name) {
+  document.getElementById('free-input').value = name;
+  saveFromInput();
+}
+
+async function saveFromInput() {
+  const name = document.getElementById('free-input').value.trim();
+  if (!name || !editCtx) return;
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true; btn.textContent = '保存中...';
+  try {
+    const { day, slot } = editCtx;
+    const key = `${day}_${slot}`;
+    const existing = meals[key];
+    if (existing) {
+      await updateMeal(existing.id, name);
+      meals[key] = { ...existing, name };
+    } else {
+      const p = await createMeal(currentWeek, day, slot, name);
+      meals[key] = { id: p.id, name };
+    }
+    renderGrid();
+    closeModal();
+    toast('保存しました', 'success');
+  } catch(e) {
+    toast('保存に失敗: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '保存';
+  }
+}
+
+async function handleDelete(e, day, slot) {
+  e.stopPropagation();
+  const key = `${day}_${slot}`;
+  const m = meals[key];
+  if (!m || !confirm(`「${m.name}」を削除しますか？`)) return;
+  try {
+    setLoading(true, '削除中...');
+    await archiveMeal(m.id);
+    delete meals[key];
+    renderGrid();
+    toast('削除しました', 'success');
+  } catch(e) {
+    toast('削除に失敗しました', 'error');
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ===== Week nav =====
+async function changeWeek(n) {
+  currentWeek = addWeeks(currentWeek, n);
+  updateHeader();
+  setLoading(true, '読み込み中...');
+  try {
+    meals = await fetchMeals(currentWeek);
+    renderGrid();
+  } catch(e) {
+    toast('読み込みに失敗しました', 'error');
+  } finally {
+    setLoading(false);
+  }
+}
+
+function goThisWeek() {
+  const tw = getISOWeek(new Date());
+  if (tw !== currentWeek) { currentWeek = tw; updateHeader(); changeWeek(0); }
+}
+
+async function syncAll() {
+  setLoading(true, 'レシピを同期中...');
+  try {
+    clearCache();
+    const [dan, me] = await Promise.all([
+      fetchRecipes(DAN_DB, true),
+      fetchRecipes(ME_DB, false)
+    ]);
+    setCache('dan', dan); setCache('me', me);
+    recipes.dan = dan; recipes.me = me;
+    setLoading(true, '献立を読み込み中...');
+    meals = await fetchMeals(currentWeek);
+    renderGrid();
+    toast('同期しました', 'success');
+  } catch(e) {
+    toast('同期に失敗: ' + e.message, 'error');
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ===== Toast =====
+let toastT;
+function toast(msg, type='') {
+  let el = document.getElementById('_toast');
+  if (!el) { el = document.createElement('div'); el.id = '_toast'; document.body.appendChild(el); }
+  el.textContent = msg;
+  el.className = `toast ${type}`;
+  el.style.opacity = '1';
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.style.opacity = '0', 2800);
+}
+
+// ===== Loading =====
+function setLoading(show, text='読み込み中...') {
+  document.getElementById('loading').classList.toggle('hidden', !show);
+  document.getElementById('loading-text').textContent = text;
+}
+
+// ===== Init =====
+async function init() {
+  setLoading(true, 'データを読み込み中...');
+  updateHeader();
+  try {
+    let dan = getCache('dan');
+    let me  = getCache('me');
+    if (!dan || !me) {
+      setLoading(true, 'レシピを読み込み中...');
+      [dan, me] = await Promise.all([
+        fetchRecipes(DAN_DB, true),
+        fetchRecipes(ME_DB, false)
+      ]);
+      setCache('dan', dan); setCache('me', me);
+    }
+    recipes.dan = dan; recipes.me = me;
+    setLoading(true, '献立を読み込み中...');
+    meals = await fetchMeals(currentWeek);
+    renderGrid();
+  } catch(e) {
+    toast('初期化に失敗しました: ' + e.message, 'error');
+  } finally {
+    setLoading(false);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
