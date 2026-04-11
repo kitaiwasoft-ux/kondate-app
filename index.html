@@ -687,9 +687,38 @@ function toast(msg, type='') {
 }
 
 // ===== Loading =====
-function setLoading(show, text='読み込み中...') {
-  document.getElementById('loading').classList.toggle('hidden', !show);
-  document.getElementById('loading-text').textContent = text;
+function setLoading(show, text='読み込み中...', isError=false) {
+  const el = document.getElementById('loading');
+  const textEl = document.getElementById('loading-text');
+  const spinner = el.querySelector('.spinner');
+  el.classList.toggle('hidden', !show);
+  textEl.textContent = text;
+  if (isError) {
+    textEl.style.color = '#ef4444';
+    textEl.style.fontSize = '13px';
+    textEl.style.maxWidth = '280px';
+    textEl.style.textAlign = 'center';
+    textEl.style.lineHeight = '1.5';
+    spinner.style.display = 'none';
+    // Add retry button
+    let retry = document.getElementById('retry-btn');
+    if (!retry) {
+      retry = document.createElement('button');
+      retry.id = 'retry-btn';
+      retry.textContent = '再試行';
+      retry.style.cssText = 'margin-top:8px;padding:8px 20px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;';
+      retry.onclick = () => { location.reload(); };
+      el.appendChild(retry);
+    }
+  } else {
+    textEl.style.color = '#888';
+    textEl.style.fontSize = '13px';
+    textEl.style.maxWidth = '';
+    textEl.style.textAlign = '';
+    spinner.style.display = '';
+    const retry = document.getElementById('retry-btn');
+    if (retry) retry.remove();
+  }
 }
 
 // ===== Init =====
@@ -710,12 +739,13 @@ async function init() {
     recipes.dan = dan; recipes.me = me;
     setLoading(true, '献立を読み込み中...');
     meals = await fetchMeals(currentWeek);
-    renderGrid();
   } catch(e) {
-    toast('初期化に失敗しました: ' + e.message, 'error');
+    setLoading(true, 'エラーが発生しました。\n' + e.message + '\n\nNotionのインテグレーション接続とAPIキーを確認してください。', true);
+    return;
   } finally {
-    setLoading(false);
+    renderGrid();
   }
+  setLoading(false);
 }
 
 init();
