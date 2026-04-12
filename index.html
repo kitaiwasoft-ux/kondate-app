@@ -46,7 +46,8 @@ body {
   justify-content: space-between; margin-bottom: 10px;
 }
 .app-title { font-size: 17px; font-weight: 700; }
-.sync-btn {
+.header-btns { display: flex; gap: 6px; }
+.sync-btn, .shop-btn {
   background: rgba(255,255,255,0.2);
   border: 1px solid rgba(255,255,255,0.4);
   color: #fff; border-radius: 8px;
@@ -80,18 +81,18 @@ body {
 /* Main */
 .main { padding: 12px 12px 80px; }
 .grid-col-headers {
-  display: grid; grid-template-columns: 46px 1fr 1fr;
-  gap: 6px; margin-bottom: 4px;
+  display: grid; grid-template-columns: 40px 1fr 1fr 1fr;
+  gap: 5px; margin-bottom: 4px;
 }
 .col-header {
-  text-align: center; font-size: 12px; font-weight: 700;
+  text-align: center; font-size: 11px; font-weight: 700;
   color: #888; padding: 2px 0;
 }
 
 /* Day row */
 .day-row {
-  display: grid; grid-template-columns: 46px 1fr 1fr;
-  gap: 6px; margin-bottom: 6px; align-items: stretch;
+  display: grid; grid-template-columns: 40px 1fr 1fr 1fr;
+  gap: 5px; margin-bottom: 5px; align-items: stretch;
 }
 .day-label {
   display: flex; flex-direction: column;
@@ -252,6 +253,59 @@ body {
 .toast.success { background: #10b981; }
 .toast.error { background: #ef4444; }
 
+/* Shopping list modal */
+.shop-modal {
+  background: #fff; border-radius: 20px 20px 0 0;
+  width: 100%; max-width: 500px;
+  max-height: 88vh; display: flex;
+  flex-direction: column; overflow: hidden;
+  animation: slideUp 0.22s ease;
+}
+.shop-body { padding: 12px 16px 24px; overflow-y: auto; flex: 1; }
+.shop-category { margin-bottom: 16px; }
+.shop-cat-title {
+  font-size: 12px; font-weight: 700; color: #6366f1;
+  letter-spacing: .5px; margin-bottom: 8px;
+  padding-bottom: 4px; border-bottom: 2px solid #ede9fe;
+}
+.shop-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 4px; border-bottom: 1px solid #f5f5f5;
+  cursor: pointer;
+}
+.shop-item input[type=checkbox] {
+  width: 18px; height: 18px; accent-color: #6366f1;
+  cursor: pointer; flex-shrink: 0;
+}
+.shop-item label {
+  font-size: 15px; cursor: pointer; flex: 1;
+}
+.shop-item.checked label { text-decoration: line-through; color: #bbb; }
+.shop-generating {
+  text-align: center; padding: 40px 20px; color: #888;
+}
+.shop-spinner {
+  width: 32px; height: 32px; border: 3px solid #e0e0e0;
+  border-top-color: #6366f1; border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 12px;
+}
+.shop-empty { text-align: center; padding: 30px; color: #bbb; font-size: 14px; }
+.shop-footer {
+  padding: 12px 16px; border-top: 1px solid #f0f0f0;
+  display: flex; gap: 8px;
+}
+.shop-regen-btn {
+  flex: 1; background: #6366f1; color: #fff; border: none;
+  border-radius: 10px; padding: 10px; font-size: 13px;
+  font-weight: 700; cursor: pointer; font-family: inherit;
+}
+.shop-clear-btn {
+  background: #f0f0f0; color: #555; border: none;
+  border-radius: 10px; padding: 10px 16px; font-size: 13px;
+  cursor: pointer; font-family: inherit;
+}
+
 /* Add recipe form */
 .add-recipe-btn {
   width: 100%; padding: 9px;
@@ -302,7 +356,10 @@ body {
 <header class="app-header">
   <div class="header-top">
     <div class="app-title">🍱 週間献立</div>
-    <button class="sync-btn" onclick="syncAll()">🔄 同期</button>
+    <div class="header-btns">
+      <button class="shop-btn" onclick="openShopModal()">🛒 買い物</button>
+      <button class="sync-btn" onclick="syncAll()">🔄 同期</button>
+    </div>
   </div>
   <div class="week-nav">
     <button class="week-btn" onclick="changeWeek(-1)">‹</button>
@@ -318,13 +375,30 @@ body {
 <main class="main">
   <div class="grid-col-headers">
     <div></div>
+    <div class="col-header">🌅 朝</div>
     <div class="col-header">☀️ 昼</div>
     <div class="col-header">🌙 夜</div>
   </div>
   <div id="grid"></div>
 </main>
 
-<!-- Modal -->
+<!-- Shopping list modal -->
+<div class="modal-overlay hidden" id="shop-overlay" onclick="onShopOverlayClick(event)">
+  <div class="shop-modal">
+    <div class="modal-drag"></div>
+    <div class="modal-header">
+      <div class="modal-title">🛒 買い物リスト</div>
+      <button class="modal-close" onclick="closeShopModal()">×</button>
+    </div>
+    <div class="shop-body" id="shop-body"></div>
+    <div class="shop-footer">
+      <button class="shop-clear-btn" onclick="clearChecked()">チェック解除</button>
+      <button class="shop-regen-btn" onclick="generateShopList()">🔄 再生成</button>
+    </div>
+  </div>
+</div>
+
+<!-- Meal modal -->
 <div class="modal-overlay hidden" id="overlay" onclick="onOverlayClick(event)">
   <div class="modal">
     <div class="modal-drag"></div>
@@ -378,7 +452,7 @@ const DAN_DB  = 'd3f2364d-b19d-4976-a857-efc37bec75e7';
 const ME_DB   = '9ee8919f-be09-4d2c-b89f-5e2fd75bb4a5';
 const DAYS    = ['月曜','火曜','水曜','木曜','金曜','土曜','日曜'];
 const DAY_JP  = ['月','火','水','木','金','土','日'];
-const SLOTS   = ['昼☀️','夜🌙'];
+const SLOTS   = ['朝🌅','昼☀️','夜🌙'];
 const CACHE_TTL = 3600000;
 
 const CAT_COLORS_DAN = {
@@ -561,14 +635,15 @@ function renderGrid() {
         openModal(day, slot);
       });
 
+      const slotLabel = slot==='朝🌅' ? '🌅 朝' : slot==='昼☀️' ? '☀️ 昼' : '🌙 夜';
       if (meal) {
         cell.innerHTML = `
-          <div class="slot-icon">${slot==='昼☀️' ? '☀️ 昼' : '🌙 夜'}</div>
+          <div class="slot-icon">${slotLabel}</div>
           <div class="meal-name">${esc(meal.name)}</div>
           <button class="del-btn" onclick="handleDelete(event,'${day}','${slot}')">×</button>`;
       } else {
         cell.innerHTML = `
-          <div class="slot-icon">${slot==='昼☀️' ? '☀️ 昼' : '🌙 夜'}</div>
+          <div class="slot-icon">${slotLabel}</div>
           <div class="meal-name">+</div>`;
       }
 
@@ -587,8 +662,8 @@ function esc(s) {
 function openModal(day, slot) {
   editCtx = { day, slot };
   const meal = meals[`${day}_${slot}`];
-  document.getElementById('modal-title').textContent =
-    `${day} ${slot==='昼☀️' ? '☀️昼ごはん' : '🌙夜ごはん'}`;
+  const slotTitle = slot==='朝🌅' ? '🌅朝ごはん' : slot==='昼☀️' ? '☀️昼ごはん' : '🌙夜ごはん';
+  document.getElementById('modal-title').textContent = `${day} ${slotTitle}`;
   document.getElementById('free-input').value = meal?.name || '';
   activeTab = 'dan'; activeCat = 'all';
   document.getElementById('tab-dan').className = 'r-tab active';
@@ -798,6 +873,90 @@ async function syncAll() {
   } finally {
     setLoading(false);
   }
+}
+
+// ===== Shopping list =====
+let shopItems = {};
+
+function openShopModal() {
+  document.getElementById('shop-overlay').classList.remove('hidden');
+  if (Object.keys(shopItems).length === 0) generateShopList();
+  else renderShopList();
+}
+
+function closeShopModal() {
+  document.getElementById('shop-overlay').classList.add('hidden');
+}
+
+function onShopOverlayClick(e) {
+  if (e.target.id === 'shop-overlay') closeShopModal();
+}
+
+async function generateShopList() {
+  const mealList = [];
+  for (const [key, meal] of Object.entries(meals)) {
+    if (meal.name) {
+      const [day, slot] = key.split('_');
+      mealList.push({ day, slot, name: meal.name });
+    }
+  }
+  if (!mealList.length) {
+    document.getElementById('shop-body').innerHTML = '<div class="shop-empty">今週の献立が入力されていません</div>';
+    return;
+  }
+
+  document.getElementById('shop-body').innerHTML = `
+    <div class="shop-generating">
+      <div class="shop-spinner"></div>
+      食材を分析中...
+    </div>`;
+
+  try {
+    const res = await fetch('/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ meals: mealList })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'API error');
+    shopItems = {};
+    for (const [cat, items] of Object.entries(data.items)) {
+      shopItems[cat] = items.map(name => ({ name, checked: false }));
+    }
+    renderShopList();
+  } catch(e) {
+    document.getElementById('shop-body').innerHTML = `<div class="shop-empty">生成に失敗しました：${e.message}</div>`;
+  }
+}
+
+function renderShopList() {
+  const body = document.getElementById('shop-body');
+  if (!Object.keys(shopItems).length) {
+    body.innerHTML = '<div class="shop-empty">食材がありません</div>';
+    return;
+  }
+  body.innerHTML = Object.entries(shopItems).map(([cat, items]) => `
+    <div class="shop-category">
+      <div class="shop-cat-title">${esc(cat)}</div>
+      ${items.map((item, i) => `
+        <div class="shop-item${item.checked ? ' checked' : ''}" id="si_${esc(cat)}_${i}">
+          <input type="checkbox" id="cb_${esc(cat)}_${i}" ${item.checked ? 'checked' : ''}
+            onchange="toggleItem('${esc(cat)}', ${i})" />
+          <label for="cb_${esc(cat)}_${i}">${esc(item.name)}</label>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+function toggleItem(cat, i) {
+  shopItems[cat][i].checked = !shopItems[cat][i].checked;
+  renderShopList();
+}
+
+function clearChecked() {
+  for (const items of Object.values(shopItems)) {
+    items.forEach(item => item.checked = false);
+  }
+  renderShopList();
 }
 
 // ===== Toast =====
