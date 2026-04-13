@@ -239,6 +239,41 @@ body {
   border-radius: 10px; color: #fff; white-space: nowrap;
 }
 .no-r { text-align: center; color: #ccc; font-size: 14px; padding: 24px; }
+.r-item .edit-btn {
+  background: #f0f0f0; border: none; border-radius: 6px;
+  padding: 4px 8px; font-size: 11px; color: #666;
+  cursor: pointer; font-family: inherit; flex-shrink: 0;
+}
+.r-item .edit-btn:active { background: #e0e0e0; }
+
+/* Edit recipe modal */
+.edit-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.edit-modal {
+  background: #fff; border-radius: 16px;
+  width: 100%; max-width: 400px;
+  padding: 20px; animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
+.edit-modal-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+.edit-modal .form-field { margin-bottom: 10px; }
+.edit-modal-actions { display: flex; gap: 8px; margin-top: 14px; }
+.edit-save-btn {
+  flex: 1; background: #6366f1; color: #fff; border: none;
+  border-radius: 8px; padding: 10px; font-size: 14px;
+  font-weight: 700; cursor: pointer; font-family: inherit;
+}
+.edit-save-btn:disabled { opacity: 0.5; }
+.edit-cancel-btn {
+  background: #f0f0f0; color: #555; border: none;
+  border-radius: 8px; padding: 10px 16px; font-size: 14px;
+  cursor: pointer; font-family: inherit;
+}
 
 /* Toast */
 .toast {
@@ -394,6 +429,21 @@ body {
     <div class="shop-footer">
       <button class="shop-clear-btn" onclick="clearChecked()">チェック解除</button>
       <button class="shop-regen-btn" onclick="generateShopList()">🔄 再生成</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit recipe modal -->
+<div class="edit-modal-overlay hidden" id="edit-overlay" onclick="onEditOverlayClick(event)">
+  <div class="edit-modal">
+    <div class="edit-modal-title" id="edit-modal-title">レシピを編集</div>
+    <div class="form-field">
+      <label class="section-label">材料（カンマ区切り）</label>
+      <input type="text" class="free-input" id="edit-ingredients" placeholder="例: 鶏肉、玉ねぎ、カレールー" style="width:100%;font-size:14px;" />
+    </div>
+    <div class="edit-modal-actions">
+      <button class="edit-cancel-btn" onclick="closeEditModal()">キャンセル</button>
+      <button class="edit-save-btn" id="edit-save-btn" onclick="saveEditRecipe()">保存</button>
     </div>
   </div>
 </div>
@@ -787,10 +837,13 @@ function renderRecipes() {
 
   el.innerHTML = list.map(r => {
     const color = colorMap[r.category] || '#9ca3af';
-    return `<div class="r-item" onclick="selectRecipe('${esc(r.name)}')">
-      <div class="rname">${esc(r.name)}</div>
-      ${r.sub ? `<div class="rsub">${esc(r.sub)}</div>` : ''}
-      <div class="rcat" style="background:${color}">${esc(r.category)}</div>
+    return `<div class="r-item">
+      <div style="flex:1;min-width:0;" onclick="selectRecipe('${esc(r.name)}')">
+        <div class="rname">${esc(r.name)}</div>
+        ${r.sub ? `<div class="rsub">${esc(r.sub)}</div>` : ''}
+      </div>
+      <div class="rcat" style="background:${color}" onclick="selectRecipe('${esc(r.name)}')">${esc(r.category)}</div>
+      <button class="edit-btn" onclick="openEditModal('${esc(r.id)}','${esc(r.name)}','${esc(r.ingredients||'')}')">編集</button>
     </div>`;
   }).join('');
 }
@@ -882,6 +935,53 @@ async function syncAll() {
     toast('同期に失敗: ' + e.message, 'error');
   } finally {
     setLoading(false);
+  }
+}
+
+// ===== Edit recipe =====
+let editRecipeCtx = null;
+
+function openEditModal(id, name, ingredients) {
+  editRecipeCtx = { id, name };
+  document.getElementById('edit-modal-title').textContent = `「${name}」の材料を編集`;
+  document.getElementById('edit-ingredients').value = ingredients || '';
+  document.getElementById('edit-overlay').classList.remove('hidden');
+  setTimeout(() => document.getElementById('edit-ingredients').focus(), 100);
+}
+
+function closeEditModal() {
+  document.getElementById('edit-overlay').classList.add('hidden');
+  editRecipeCtx = null;
+}
+
+function onEditOverlayClick(e) {
+  if (e.target.id === 'edit-overlay') closeEditModal();
+}
+
+async function saveEditRecipe() {
+  if (!editRecipeCtx) return;
+  const ingredients = document.getElementById('edit-ingredients').value.trim();
+  const btn = document.getElementById('edit-save-btn');
+  btn.disabled = true; btn.textContent = '保存中...';
+  try {
+    await notionAPI(`pages/${editRecipeCtx.id}`, 'PATCH', {
+      properties: {
+        '材料': { rich_text: [{ text: { content: ingredients } }] }
+      }
+    });
+    // Update local state
+    for (const tab of ['dan', 'me']) {
+      const r = recipes[tab].find(r => r.id === editRecipeCtx.id);
+      if (r) { r.ingredients = ingredients; break; }
+    }
+    clearCache();
+    toast('保存しました', 'success');
+    closeEditModal();
+    renderRecipes();
+  } catch(e) {
+    toast('保存に失敗: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '保存';
   }
 }
 
