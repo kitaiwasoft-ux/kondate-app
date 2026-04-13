@@ -932,7 +932,7 @@ function generateShopList() {
       .map(name => ({ name, checked: false }));
   }
   if (noIngredientMeals.length) {
-    shopItems['材料未登録の料理'] = noIngredientMeals.map(name => ({ name, checked: false }));
+    shopItems['材料未登録の料理'] = [...new Set(noIngredientMeals)].map(name => ({ name, checked: false }));
   }
   renderShopList();
 }
