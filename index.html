@@ -433,6 +433,10 @@ body {
           <label id="add-sub-label">メイン食材</label>
           <input type="text" id="add-sub" placeholder="" />
         </div>
+        <div class="form-field">
+          <label>材料（カンマ区切り・任意）</label>
+          <input type="text" id="add-ingredients" placeholder="例: 鶏肉、玉ねぎ、カレールー" />
+        </div>
         <div class="form-actions">
           <button class="form-cancel-btn" onclick="toggleAddForm()">キャンセル</button>
           <button class="form-save-btn" id="add-save-btn" onclick="saveNewRecipe()">追加する</button>
@@ -558,6 +562,7 @@ async function fetchRecipes(dbId, isDan) {
         sub: isDan
           ? (p.properties['メイン食材']?.rich_text?.[0]?.plain_text || '')
           : (p.properties['調理時間']?.rich_text?.[0]?.plain_text || ''),
+        ingredients: p.properties['材料']?.rich_text?.[0]?.plain_text || '',
       });
     }
     cursor = data.has_more ? data.next_cursor : null;
@@ -708,6 +713,7 @@ function toggleAddForm() {
     sel.innerHTML = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
     document.getElementById('add-name').value = '';
     document.getElementById('add-sub').value = '';
+    document.getElementById('add-ingredients').value = '';
     document.getElementById('add-name').focus();
   }
 }
@@ -717,6 +723,7 @@ async function saveNewRecipe() {
   if (!name) { toast('レシピ名を入力してください', 'error'); return; }
   const category = document.getElementById('add-category').value;
   const sub = document.getElementById('add-sub').value.trim();
+  const ingredients = document.getElementById('add-ingredients').value.trim();
   const isDan = activeTab === 'dan';
   const dbId = isDan ? DAN_DB : ME_DB;
 
@@ -733,12 +740,15 @@ async function saveNewRecipe() {
     } else {
       props['調理時間'] = { rich_text: [{ text: { content: sub } }] };
     }
+    if (ingredients) {
+      props['材料'] = { rich_text: [{ text: { content: ingredients } }] };
+    }
     const page = await notionAPI('pages', 'POST', {
       parent: { database_id: dbId },
       properties: props
     });
     // Add to local state
-    const newRecipe = { id: page.id, name, category, sub };
+    const newRecipe = { id: page.id, name, category, sub, ingredients };
     recipes[activeTab].push(newRecipe);
     clearCache();
     toast('レシピを追加しました', 'success');
@@ -892,41 +902,39 @@ function onShopOverlayClick(e) {
   if (e.target.id === 'shop-overlay') closeShopModal();
 }
 
-async function generateShopList() {
-  const mealList = [];
-  for (const [key, meal] of Object.entries(meals)) {
-    if (meal.name) {
-      const [day, slot] = key.split('_');
-      mealList.push({ day, slot, name: meal.name });
+function generateShopList() {
+  const allRecipes = [...recipes.dan, ...recipes.me];
+  const ingredientSet = new Set();
+  const noIngredientMeals = [];
+
+  for (const meal of Object.values(meals)) {
+    if (!meal.name) continue;
+    const recipe = allRecipes.find(r => r.name === meal.name);
+    if (recipe && recipe.ingredients) {
+      recipe.ingredients.split(/[、,，\n]/).forEach(i => {
+        const t = i.trim();
+        if (t) ingredientSet.add(t);
+      });
+    } else {
+      noIngredientMeals.push(meal.name);
     }
   }
-  if (!mealList.length) {
-    document.getElementById('shop-body').innerHTML = '<div class="shop-empty">今週の献立が入力されていません</div>';
+
+  if (!ingredientSet.size && !noIngredientMeals.length) {
+    document.getElementById('shop-body').innerHTML =
+      '<div class="shop-empty">今週の献立が入力されていません</div>';
     return;
   }
 
-  document.getElementById('shop-body').innerHTML = `
-    <div class="shop-generating">
-      <div class="shop-spinner"></div>
-      食材を分析中...
-    </div>`;
-
-  try {
-    const res = await fetch('/api/claude', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ meals: mealList })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'API error');
-    shopItems = {};
-    for (const [cat, items] of Object.entries(data.items)) {
-      shopItems[cat] = items.map(name => ({ name, checked: false }));
-    }
-    renderShopList();
-  } catch(e) {
-    document.getElementById('shop-body').innerHTML = `<div class="shop-empty">生成に失敗しました：${e.message}</div>`;
+  shopItems = {};
+  if (ingredientSet.size) {
+    shopItems['食材'] = [...ingredientSet].sort((a,b) => a.localeCompare(b,'ja'))
+      .map(name => ({ name, checked: false }));
   }
+  if (noIngredientMeals.length) {
+    shopItems['材料未登録の料理'] = noIngredientMeals.map(name => ({ name, checked: false }));
+  }
+  renderShopList();
 }
 
 function renderShopList() {
