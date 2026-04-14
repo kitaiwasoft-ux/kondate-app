@@ -1010,8 +1010,9 @@ function generateShopList() {
   for (const meal of Object.values(meals)) {
     if (!meal.name) continue;
     const recipe = allRecipes.find(r => r.name === meal.name);
-    if (recipe && recipe.ingredients) {
-      recipe.ingredients.split(/[、,，\n]/).forEach(i => {
+    const source = recipe?.ingredients || recipe?.sub || '';
+    if (source) {
+      source.split(/[、,，\n]/).forEach(i => {
         const t = i.trim();
         if (t) ingredientSet.add(t);
       });
