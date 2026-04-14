@@ -461,6 +461,7 @@ body {
       <div class="input-row">
         <input type="text" class="free-input" id="free-input" placeholder="例: カレーライス" />
         <button class="save-btn" id="save-btn" onclick="saveFromInput()">保存</button>
+        <button class="save-btn" id="delete-meal-btn" onclick="deleteMealFromModal()" style="background:#ef4444;display:none;">削除</button>
       </div>
 
       <div class="section-label">レシピから選ぶ</div>
@@ -720,6 +721,7 @@ function openModal(day, slot) {
   const slotTitle = slot==='朝🌅' ? '🌅朝ごはん' : slot==='昼☀️' ? '☀️昼ごはん' : '🌙夜ごはん';
   document.getElementById('modal-title').textContent = `${day} ${slotTitle}`;
   document.getElementById('free-input').value = meal?.name || '';
+  document.getElementById('delete-meal-btn').style.display = meal ? 'inline-flex' : 'none';
   activeTab = 'dan'; activeCat = 'all';
   document.getElementById('tab-dan').className = 'r-tab active';
   document.getElementById('tab-me').className = 'r-tab';
@@ -876,6 +878,22 @@ async function saveFromInput() {
     toast('保存に失敗: ' + e.message, 'error');
   } finally {
     btn.disabled = false; btn.textContent = '保存';
+  }
+}
+
+async function deleteMealFromModal() {
+  if (!editCtx) return;
+  const { day, slot } = editCtx;
+  if (!confirm(`「${meals[`${day}_${slot}`]?.name}」を削除しますか？`)) return;
+  try {
+    const key = `${day}_${slot}`;
+    await archiveMeal(meals[key].id);
+    delete meals[key];
+    renderGrid();
+    closeModal();
+    toast('削除しました', 'success');
+  } catch(e) {
+    toast('削除に失敗しました', 'error');
   }
 }
 
